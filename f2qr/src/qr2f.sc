@@ -17,12 +17,12 @@ import scala.jdk.CollectionConverters._
 def qr2f() = {
   def decode(raw: Array[Byte]) = java.nio.ByteBuffer.wrap(raw.take(4)).getInt -> raw.drop(4)
 
-  val grabberFactory = new FFmpegFrameGrabber(s":0+0,0")
+  val screen = java.awt.Toolkit.getDefaultToolkit.getScreenSize
+  val grabberFactory = new FFmpegFrameGrabber(s"${System.getenv("DISPLAY")}+0,0")
   grabberFactory.setFormat("x11grab")
   grabberFactory.setImageMode(ImageMode.GRAY)
-  grabberFactory.setImageWidth(2560)
-  grabberFactory.setImageHeight(1440)
-  grabberFactory.setFrameRate(120)
+  grabberFactory.setImageWidth(screen.getWidth.toInt)
+  grabberFactory.setImageHeight(screen.getHeight.toInt)
   grabberFactory.start()
 
   val remain = scala.collection.mutable.Set[Int]()
