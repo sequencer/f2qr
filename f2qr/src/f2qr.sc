@@ -28,25 +28,27 @@ def readBinary(f: ReadablePath, consoleSize: Int) = {
   val raw = os.read.bytes(f).grouped(fileSize(consoleSize)).toIndexedSeq
   val buf = java.nio.ByteBuffer.allocate(4)
   val head: Array[Byte] = {
-    val lengthByte = buf.putInt(raw.length).array
+    val lengthByte = buf.putInt(raw.length + 100).array
     buf.clear()
     lengthByte
   }
-  Seq(head) ++ raw.zipWithIndex.map { b =>
+  val out = Seq(head) ++ raw.zipWithIndex.map { b =>
     // start from 1
     val sizeArray = buf.putInt(b._2 + 1).array
     buf.clear()
     sizeArray ++ b._1
   }
+  os.write.over(Path("f2qr.log", pwd), out.zipWithIndex.foldLeft("")((left, right) => left + s"${right._2} -> ${right._1.map("%02x" format _).mkString}" + "\n"))
+  out
 }
 
 def toQR(data: Array[Byte], consoleSize: Int, ec: ErrorCorrectionLevel): BitMatrix = {
-  val str = new String(java.util.Base64.getEncoder.encode(data))
+  val str = new String(data, "ISO-8859-1")
   new MultiFormatWriter().encode(str, BarcodeFormat.QR_CODE, consoleSize, consoleSize,
     Map(
       EncodeHintType.MARGIN -> 2,
       EncodeHintType.ERROR_CORRECTION -> ec,
-      EncodeHintType.CHARACTER_SET -> java.nio.charset.StandardCharsets.US_ASCII,
+      EncodeHintType.CHARACTER_SET -> "ISO-8859-1",
     ).asJava
   )
 }
@@ -70,7 +72,7 @@ def qrString(bitMatrix: BitMatrix): String = {
 }
 
 @main
-def f2qr(path: os.Path, framerate: Int, imageSize: Int = 0, section: Seq[Int] = Seq(), ecLevel: Int = 1, debug: Boolean = false): Unit = {
+def f2qr(path: os.Path, framerate: Int, imageSize: Int = 0, section: Seq[Int] = Seq(), ecLevel: Int = 1): Unit = {
   val consoleSize = if (imageSize == 0) {
     val console = org.jline.terminal.TerminalBuilder.terminal()
     console.getWidth min console.getHeight - 4
@@ -78,17 +80,13 @@ def f2qr(path: os.Path, framerate: Int, imageSize: Int = 0, section: Seq[Int] = 
     imageSize
   }
   val file = readBinary(path, consoleSize)
-  if (debug) {
-    os.write.over(Path("f2qr.log", pwd), file.zipWithIndex.foldLeft("")((left, right)=>left + "\n" + s"${right._2} => ${java.util.Base64.getEncoder.encode(right._1)}"))
-    return
-  }
   val toPrint = if (section.isEmpty)
     file.zipWithIndex
   else {
     file.zipWithIndex.filter(s => section.contains(s._2)).map(_._1).zipWithIndex
   }
   toPrint.foreach(d => {
-    println(s"\033c${d._2} of ${toPrint.length}")
+    println(s"\033c${d._2 + 1} of ${toPrint.length}")
     print(qrString(toQR(d._1, consoleSize, ecLevel match {
       case 1 => ErrorCorrectionLevel.L
       case 2 => ErrorCorrectionLevel.M
@@ -97,5 +95,5 @@ def f2qr(path: os.Path, framerate: Int, imageSize: Int = 0, section: Seq[Int] = 
     })))
     Thread.sleep(1000 / framerate)
   })
-  println(s"console: $consoleSize")
+  println(s"console: $consoleSize, ${toPrint.size}")
 }
